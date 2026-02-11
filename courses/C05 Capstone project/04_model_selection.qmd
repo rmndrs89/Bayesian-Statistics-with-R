@@ -1,0 +1,224 @@
+# Model Selection
+
+## Model selection criteria
+To fit our AR model to some real data we need to determine the order of the AR process. One possible way is to repeat the analysis for different values of model order $p$ and choose the best model based on some criteria. 
+
+The two most widely known criteria are the so-called Akaike information criteria (AIC) and the Bayesian information criteria (BIC). 
+
+How do we select the order of an AR process using AIC or BIC?
+
+Suppose we still have data $y_{1:T}$. 
+
+As we are comparing models with different numbers of parameters, we have to do so based on a common sample size. Thus, we fix a maximum order $p^{*}$, and consider $p < p^{*}$. When comparing models of various orders $p$ we do so with $n = T - p^{*}$
+
+For any order $p < p^{*}$, the AR($p$) model can be written as:
+$$
+\mathbf{y} = \mathbf{F}^{\top} \boldsymbol{\phi} + \boldsymbol{\epsilon}
+$$
+with $\mathbf{y} = \begin{bmatrix}y_{p^{*}} & \ldots & y_{T}\end{bmatrix}^{\top}$ and the design matrix:
+$$
+\mathbf{F} = \begin{bmatrix}
+y_{p^{*}} & y_{p^{*}+1} & \cdots & y_{T-1} \\
+y_{p^{*}-1} & y_{p^{*}1} & \cdots & y_{T-2} \\
+y_{p^{*}-p+1} & y_{p^{*}-p+2} & \cdots & y_{T-p} \\
+\end{bmatrix} \in \mathbb{R}^{p \times n}
+$$
+and the AR coefficients are just:
+$$\boldsymbol{\phi} = \begin{bmatrix}\phi_{1} & \phi_{2} & \cdots \phi_{p}\end{bmatrix}^{\top}$$ 
+and $\boldsymbol{\epsilon} \sim \mathcal{N\left(0,\nu \mathbf{I}_{n}\right)$.
+
+Then based on our notation the conditional likelihood is:
+$$
+\begin{align}
+f(y_{(p^{*}+1):T} \mid y_{1:p^{*}}, \boldsymbol{\phi}, \nu) &= \mathcal{N}\left(\mathbf{F}^{\top} \boldsymbol{\phi}, \nu \mathbf{I}_{n}\right) \\
+ &= (2 \pi \nu)^{1/2} \exp\left[-\frac{(\mathbf{y} - \mathbf{F}^{\top} \boldsymbol{\phi})^{\top} (\mathbf{y} - \mathbf{F}^{\top} \boldsymbol{\phi})}{2 \nu}\right]
+\end{align}
+$$
+
+Now we can use multivariate linear regression theory to define:
+$$
+\hat{\boldsymbol{\phi}} = \left( \mathbf{F} \mathbf{F}^{\top} \right)^{-1} \mathbf{F} \mathbf{y}
+$$
+Then we can expand:
+$$
+\begin{align}
+(\mathbf{y} - \mathbf{F}^{\top} \boldsymbol{\phi})^{\top} (\mathbf{y} - \mathbf{F}^{\top} \boldsymbol{\phi}) &= (\mathbf{y} - \mathbf{F}^{\top} \hat{\boldsymbol{\phi}} + \mathbf{F}^{\top} \hat{\boldsymbol{\phi}} - \mathbf{F}^{\top} \boldsymbol{\phi})^{\top} (\mathbf{y} - \mathbf{F}^{\top} \hat{\boldsymbol{\phi}} + \mathbf{F}^{\top} \hat{\boldsymbol{\phi}} - \mathbf{F}^{\top} \boldsymbol{\phi}) \\
+ &= \underbrace{(\mathbf{y} - \mathbf{F}^{\top} \hat{\boldsymbol{\phi}})^{\top} (\mathbf{y} - \mathbf{F}^{\top} \hat{\boldsymbol{\phi}})}_{\mathbf{R}} + (\hat{\boldsymbol{\phi}} - \boldsymbol{\phi}) \mathbf{F} \mathbf{F}^{\top} (\hat{\boldsymbol{\phi}} - \boldsymbol{\phi})
+\end{align}
+$$
+The definitions of the AIC and BIC are then given by:
+$$
+\begin{align}
+\text{AIC} &= 2 p + n \log\left(\frac{R}{n - p}\right) \\
+\text{BIC} &= \log(n) \cdot p + n \log\left(\frac{R}{n - p}\right)
+\end{align}
+$$
+
+Values of $p$ leading too small AIC and BIC values are taken as indicative of relatively good model fits. We've seen a ton of AR models so explored.
+
+Larger values of $p$ will tend to give smaller various estimates which decrease this good-of-fit term in both expressions. But this decrease is penalized of parameter dimensions by the first term. 
+
+BIC tends to choose simpler models than AIC. 
+
+We simulate an AR(2) process and implement the AIC and BIC criteria to check if the best model selected has order 2. 
+
+```{r}
+## Simulate data
+set.seed(1)
+AR.model = list(order = c(2, 0, 0), ar = c(0.5, 0.4))
+y.sample = arima.sim(n = 100, model = AR.model, sd = 0.1)
+plot(y.sample, type = "l", xlab = "time", ylab = "")
+```
+
+We check the ACF and PACF:
+```{r}
+par(mfrow = c(1, 2))
+acf(y.sample, main = "", xlab = "Lag")
+pacf(y.sample, main = "", xlab = "Lag")
+```
+
+We now set the maximum AR order, $p^{*} = 15$, and since $T = 100$, we use the last $T - p = 85$ observations for the analysis. We plot the AIC and BIC for different values of $p$:
+```{r}
+n.all = length(y.sample)
+p.star = 15
+
+Y = matrix(y.sample[(p.star + 1):n.all], ncol = 1)
+sample.all = matrix(y.sample, ncol = 1)
+n = length(Y)
+p = seq(1, p.star, by = 1)
+
+design.mtx = function(p_cur) {
+  Fmtx = matrix(0, ncol = n, nrow = p_cur)
+  for (i in 1:p_cur) {
+    start.y = p.star + 1 - i
+    end.y = start.y + n - 1
+    Fmtx[i,] = sample.all[start.y : end.y, 1]
+  }
+  return(Fmtx)
+}
+
+criteria.ar = function(p_cur) {
+  Fmtx = design.mtx(p_cur)
+  beta.hat=chol2inv(chol(Fmtx%*%t(Fmtx)))%*%Fmtx%*%Y
+  R=t(Y-t(Fmtx)%*%beta.hat)%*%(Y-t(Fmtx)%*%beta.hat)
+  sp.square=R/(n-p_cur)
+  aic=2*p_cur+n*log(sp.square)
+  bic=log(n)*p_cur+n*log(sp.square)
+  result=c(aic,bic)
+  return(result)
+}
+
+criteria = sapply(p, criteria.ar)
+
+plot(p, criteria[1,], type = "p", pch = "a", col = "red", xlab = "AR order p", ylab = "Criterion", main="", ylim = c(min(criteria) - 10, max(criteria) + 10))
+points(p, criteria[2,], pch = "b", col = "blue")
+```
+
+## Deviance Information Criterion
+We will now talk about the deviance information criterion (DIC). The DIC is a somewhat Bayesian version of the AIC. We will use DIC later to determine the number of components when we have introduced the mixture AR model for time series. 
+
+Suppose we have some data $y_{1:T}$ that is generated from some distribution. For the AR model this takes the form:
+$$
+\begin{align}
+Y &\sim p(y \mid \theta) \\
+ &\sim \mathcal{N}\left( y \mid \mathbf{F}^{\top} \boldsymbol{\phi}, \nu \mathbf{I}\right)
+\end{align}
+$$
+
+The general formula for calculating the DIC arises from the model estimation of expected log density, defined as:
+$$
+\hat{\text{elpd}}_{\text{DIC}} = \log p(y \mid \hat{\theta}_{\text{Bayes}}) - p_{\text{DIC}}
+$$
+with:
+
+- $\hat{\theta}_{\text{Bayes}} = \mathbb{E}(\theta \mid y)$, i.e. the posterior mean of the parameters,
+- $p_{\text{DIC}} = 2 (\log p(y \mid \hat{\theta}_{\text{Bayes}}) - \mathbb{E}_{\text{post}} \log p(y \mid \theta))$, i.e. the effective number of parameters
+
+This expectation is an average of $\theta$ or a posterior distribution, for which normally you do not have a closed form solution. However, we can compute it in a Monte Carlo way. That is, we use posterior samples of parameters $\theta$ to calculate it. Suppose the posterior sample of model parameters $\theta$ is denoted as $\theta^{(s)}$ for $s = 1, \ldots, S$, then this computed $p_{\text{DIC}}$ is:
+$$
+p_{\text{DIC}} = 2 (\log p(y \mid \hat{\theta}_{\text{Bayes}}) - \frac{1}{S} \sum_{s=1}^{S} \log p(y \mid \theta^{(s)}))
+$$
+
+The actual quantity, called DIC, is defined in terms of the deviance, rather than the log predictive density. 
+
+That is:
+$$
+\text{DIC} = -2 \log p(y \mid \hat{\theta}_{\text{Bayes}}) + 2 p_{\text{DIC}}
+$$
+### Get posterior samples
+```{r}
+library(mvtnorm)
+
+n.all=length(y.sample)
+p=2
+m0=matrix(rep(0,p),ncol=1)
+C0=diag(p)
+n0=2
+d0=2
+
+Y=matrix(y.sample[3:n.all],ncol=1)
+Fmtx=matrix(c(y.sample[2:(n.all-1)],y.sample[1:(n.all-2)]),nrow=p,byrow=TRUE)
+n=length(Y)
+
+e=Y-t(Fmtx)%*%m0
+Q=t(Fmtx)%*%C0%*%Fmtx+diag(n)
+Q.inv=chol2inv(chol(Q))
+A=C0%*%Fmtx%*%Q.inv
+m=m0+A%*%e
+C=C0-A%*%Q%*%t(A)
+n.star=n+n0
+d.star=t(Y-t(Fmtx)%*%m0)%*%Q.inv%*%(Y-t(Fmtx)%*%m0)+d0
+
+n.sample=5000
+
+nu.sample=rep(0,n.sample)
+phi.sample=matrix(0,nrow=n.sample,ncol=p)
+
+for (i in 1:n.sample) {
+  set.seed(i)
+  nu.new=1/rgamma(1,shape=n.star/2,rate=d.star/2)
+  nu.sample[i]=nu.new
+  phi.new=rmvnorm(1,mean=m,sigma=nu.new*C)
+  phi.sample[i,]=phi.new
+}
+
+par(mfrow=c(1,3))
+hist(phi.sample[,1],freq=FALSE,xlab=expression(phi[1]),main="")
+lines(density(phi.sample[,1]),type='l',col='red')
+hist(phi.sample[,2],freq=FALSE,xlab=expression(phi[2]),main="")
+lines(density(phi.sample[,2]),type='l',col='red')
+hist(nu.sample,freq=FALSE,xlab=expression(nu),main="")
+lines(density(nu.sample),type='l',col='red')
+```
+
+### Calculate DIC
+```{r}
+cal_log_likelihood=function(phi,nu){
+  mu.y=t(Fmtx)%*%phi
+  log.lik=sapply(
+    1:length(mu.y), 
+    function(k){
+      dnorm(Y[k,1],mu.y[k],sqrt(nu),log=TRUE)
+    }
+  )
+  sum(log.lik)
+}
+
+phi.bayes=colMeans(phi.sample)
+nu.bayes=mean(nu.sample)
+
+log.lik.bayes=cal_log_likelihood(phi.bayes,nu.bayes)
+
+post.log.lik=sapply(
+  1:5000, 
+  function(k){
+    cal_log_likelihood(phi.sample[k,],nu.sample[k])
+  }
+)
+E.post.log.lik=mean(post.log.lik)
+
+p_DIC=2*(log.lik.bayes-E.post.log.lik)
+DIC=-2*log.lik.bayes+2*p_DIC
+DIC
+```
+

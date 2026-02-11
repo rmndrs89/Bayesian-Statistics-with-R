@@ -1,0 +1,30 @@
+project:
+  type: book
+  preview:
+    port: 4200
+    browser: true
+
+book:
+  title: "Bayesian Statistics with R"
+  author: "Robbin Romijnders"
+  date: today
+  chapters:
+    - index.qmd
+    - intro.qmd
+    - part: "Capstone project"
+      chapters:
+        - courses/C05 Capstone project/01_autoregressive_time_series.qmd
+        - courses/C05 Capstone project/02_AR_model_fitting_example.qmd
+        - courses/C05 Capstone project/03_first_step_project.qmd
+        - courses/C05 Capstone project/04_model_selection.qmd
+        - courses/C05 Capstone project/99_capstone_project.qmd
+    - summary.qmd
+    - references.qmd
+
+bibliography: references.bib
+
+format:
+  html:
+    theme: cosmo
+  # pdf:
+  #   documentclass: scrreprt

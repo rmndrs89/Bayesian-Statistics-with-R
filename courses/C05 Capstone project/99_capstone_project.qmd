@@ -1,0 +1,282 @@
+# Capstone Project
+
+## Earthquakes data
+
+### Get the data
+```{r}
+earthquakes.dat <- read.delim("./data/earthquakes.txt")
+earthquakes.dat$Quakes = as.numeric(earthquakes.dat$Quakes)
+
+y.dat=earthquakes.dat$Quakes[1:100] ## this is the training data
+y.new=earthquakes.dat$Quakes[101:103] ## this is the test data
+
+plot.ts(
+  y.dat,
+  ylab = expression(italic(y)[italic(t)]),
+  xlab = expression(italic(t)),
+  main = ""
+)
+```
+
+We check the ACF and PACF:
+```{r}
+par(mfrow = c(1, 2))
+acf(y.dat, main = "", xlab = "Lag")
+pacf(y.dat, main = "", xlab = "Lag")
+```
+
+### Estimate the model order
+We now set the maximum AR order, $p^{*} = 10$, and since $T = 100$, we use the last $T - p = 90$ observations for the analysis. We plot the AIC and BIC for different values of $p$:
+```{r}
+n.all = length(y.dat)
+p.star = 10
+
+Y = matrix(y.dat[(p.star + 1):n.all], ncol = 1)
+sample.all = matrix(y.dat, ncol = 1)
+n = length(Y)
+p = seq(1, p.star, by = 1)
+
+design.mtx = function(p_cur) {
+  Fmtx = matrix(0, ncol = n, nrow = p_cur)
+  for (i in 1:p_cur) {
+    start.y = p.star + 1 - i
+    end.y = start.y + n - 1
+    Fmtx[i,] = sample.all[start.y : end.y, 1]
+  }
+  return(Fmtx)
+}
+
+criteria.ar = function(p_cur) {
+  Fmtx = design.mtx(p_cur)
+  beta.hat=chol2inv(chol(Fmtx%*%t(Fmtx)))%*%Fmtx%*%Y
+  R=t(Y-t(Fmtx)%*%beta.hat)%*%(Y-t(Fmtx)%*%beta.hat)
+  sp.square=R/(n-p_cur)
+  aic=2*p_cur+n*log(sp.square)
+  bic=log(n)*p_cur+n*log(sp.square)
+  result=c(aic,bic)
+  return(result)
+}
+
+criteria = sapply(p, criteria.ar)
+
+plot(p, criteria[1,], type = "p", pch = "a", col = "red", xlab = "AR order p", ylab = "Criterion", main="", ylim = c(min(criteria) - 10, max(criteria) + 10))
+points(p, criteria[2,], pch = "b", col = "blue")
+```
+
+### Get posterior samples
+
+```{r}
+library(mvtnorm)
+
+n.all=length(y.dat)
+p=3
+m0=matrix(rep(0,p),ncol=1)
+C0=10 * diag(p)
+n0=0.02
+d0=0.02
+
+Y=matrix(y.dat[(p+1):n.all], ncol=1)
+Fmtx=matrix(
+  c(
+    y.dat[3:(n.all-1)],
+    y.dat[2:(n.all-2)],
+    y.dat[1:(n.all-3)]
+  ),
+  nrow=p,byrow=TRUE
+)
+n=length(Y)
+
+e=Y-t(Fmtx)%*%m0
+Q=t(Fmtx)%*%C0%*%Fmtx+diag(n)
+Q.inv=chol2inv(chol(Q))
+A=C0%*%Fmtx%*%Q.inv
+m=m0+A%*%e
+C=C0-A%*%Q%*%t(A)
+n.star=n+n0
+d.star=t(Y-t(Fmtx)%*%m0)%*%Q.inv%*%(Y-t(Fmtx)%*%m0)+d0
+
+n.sample=5000
+
+nu.sample=rep(0,n.sample)
+phi.sample=matrix(0,nrow=n.sample,ncol=p)
+
+for (i in 1:n.sample) {
+  set.seed(i)
+  nu.new=1/rgamma(1,shape=n.star/2,rate=d.star/2)
+  nu.sample[i]=nu.new
+  phi.new=rmvnorm(1,mean=m,sigma=nu.new*C)
+  phi.sample[i,]=phi.new
+}
+
+par(mfrow=c(1,4))
+hist(phi.sample[,1],freq=FALSE,xlab=expression(phi[1]),main="")
+lines(density(phi.sample[,1]),type='l',col='red')
+hist(phi.sample[,2],freq=FALSE,xlab=expression(phi[2]),main="")
+lines(density(phi.sample[,2]),type='l',col='red')
+hist(phi.sample[,3],freq=FALSE,xlab=expression(phi[3]),main="")
+lines(density(phi.sample[,3]),type='l',col='red')
+hist(nu.sample,freq=FALSE,xlab=expression(nu),main="")
+lines(density(nu.sample),type='l',col='red')
+```
+
+### Calculate DIC
+```{r}
+cal_log_likelihood=function(phi,nu){
+  mu.y=t(Fmtx)%*%phi
+  log.lik=sapply(
+    1:length(mu.y), 
+    function(k){
+      dnorm(Y[k,1],mu.y[k],sqrt(nu),log=TRUE)
+    }
+  )
+  sum(log.lik)
+}
+
+phi.bayes=colMeans(phi.sample)
+nu.bayes=mean(nu.sample)
+
+log.lik.bayes=cal_log_likelihood(phi.bayes,nu.bayes)
+
+post.log.lik=sapply(
+  1:5000, 
+  function(k){
+    cal_log_likelihood(phi.sample[k,],nu.sample[k])
+  }
+)
+E.post.log.lik=mean(post.log.lik)
+
+p_DIC=2*(log.lik.bayes-E.post.log.lik)
+DIC=-2*log.lik.bayes+2*p_DIC
+DIC
+```
+
+
+## Google search index data
+
+### Get the data
+```{r}
+covid.dat <- read.delim("./data/GoogleSearchIndex.txt")
+covid.dat$Week=as.Date(as.character(covid.dat$Week),format = "%Y-%m-%d")
+
+y.dat=covid.dat$covid[1:57] ## this is the training data
+y.new=covid.dat$covid[58:60] ## this is the test data
+
+plot.ts(
+  y.dat,
+  ylab = expression(italic(y)[italic(t)]),
+  xlab = expression(italic(t)),
+  main = ""
+)
+```
+
+We check the ACF and PACF:
+```{r}
+par(mfrow = c(1, 2))
+acf(y.dat, main = "", xlab = "Lag")
+pacf(y.dat, main = "", xlab = "Lag")
+```
+
+### Estimate the model order
+We now set the maximum AR order, $p^{*} = 10$, and since $T = 57$, we use the last $T - p = 47$ observations for the analysis. We plot the AIC and BIC for different values of $p$:
+```{r}
+n.all = length(y.dat)
+p.star = 10
+
+Y = matrix(y.dat[(p.star + 1):n.all], ncol = 1)
+sample.all = matrix(y.dat, ncol = 1)
+n = length(Y)
+p = seq(1, p.star, by = 1)
+
+## The functions are already defined above, 
+## no need to repeat ourselves here!
+
+# design.mtx = function(p_cur) {...}
+
+# criteria.ar = function(p_cur) {...}
+
+criteria = sapply(p, criteria.ar)
+
+plot(p, criteria[1,], type = "p", pch = "a", col = "red", xlab = "AR order p", ylab = "Criterion", main="", ylim = c(min(criteria) - 10, max(criteria) + 10))
+points(p, criteria[2,], pch = "b", col = "blue")
+```
+
+### Get posterior samples
+
+```{r}
+library(mvtnorm)
+
+n.all=length(y.dat)
+p=1
+m0=matrix(rep(0,p),ncol=1)
+C0=10
+n0=0.02
+d0=0.02
+
+Y=matrix(y.dat[(p+1):n.all], ncol=1)
+Fmtx=matrix(
+  c(
+    y.dat[1:(n.all-1)]
+  ),
+  nrow=p,byrow=TRUE
+)
+n=length(Y)
+
+e=Y-t(Fmtx)%*%m0
+Q=t(Fmtx)%*%C0%*%Fmtx+diag(n)
+Q.inv=chol2inv(chol(Q))
+A=C0%*%Fmtx%*%Q.inv
+m=m0+A%*%e
+C=C0-A%*%Q%*%t(A)
+n.star=n+n0
+d.star=t(Y-t(Fmtx)%*%m0)%*%Q.inv%*%(Y-t(Fmtx)%*%m0)+d0
+
+n.sample=5000
+
+nu.sample=rep(0,n.sample)
+phi.sample=matrix(0,nrow=n.sample,ncol=p)
+
+for (i in 1:n.sample) {
+  set.seed(i)
+  nu.new=1/rgamma(1,shape=n.star/2,rate=d.star/2)
+  nu.sample[i]=nu.new
+  phi.new=rmvnorm(1,mean=m,sigma=nu.new*C)
+  phi.sample[i,]=phi.new
+}
+
+par(mfrow=c(1,2))
+hist(phi.sample[,1],freq=FALSE,xlab=expression(phi[1]),main="")
+lines(density(phi.sample[,1]),type='l',col='red')
+hist(nu.sample,freq=FALSE,xlab=expression(nu),main="")
+lines(density(nu.sample),type='l',col='red')
+```
+
+### Calculate DIC
+```{r}
+cal_log_likelihood=function(phi,nu){
+  mu.y=t(Fmtx)%*%phi
+  log.lik=sapply(
+    1:length(mu.y), 
+    function(k){
+      dnorm(Y[k,1],mu.y[k],sqrt(nu),log=TRUE)
+    }
+  )
+  sum(log.lik)
+}
+
+phi.bayes=colMeans(phi.sample)
+nu.bayes=mean(nu.sample)
+
+log.lik.bayes=cal_log_likelihood(phi.bayes,nu.bayes)
+
+post.log.lik=sapply(
+  1:5000, 
+  function(k){
+    cal_log_likelihood(phi.sample[k,],nu.sample[k])
+  }
+)
+E.post.log.lik=mean(post.log.lik)
+
+p_DIC=2*(log.lik.bayes-E.post.log.lik)
+DIC=-2*log.lik.bayes+2*p_DIC
+DIC
+```

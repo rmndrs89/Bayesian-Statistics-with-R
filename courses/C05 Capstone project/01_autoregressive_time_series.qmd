@@ -1,0 +1,104 @@
+# Autoregressive Time Series Models
+
+## Earth Quake Data
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+earthquakes.dat <- read.delim("./data/earthquakes.txt")
+earthquakes.dat$Quakes = as.numeric(earthquakes.dat$Quakes)
+
+
+y.dat=earthquakes.dat$Quakes[1:100] ## this is the training data
+y.new=earthquakes.dat$Quakes[101:103] ## this is the test data
+```
+
+## Model Specification
+
+An autoregressive (AR) time series model, of order $p$, abbreviated as AR($p$), takes the form:
+$$
+\begin{align}
+y_{t} &= \phi_{1} y_{t-1} + \ldots + \phi_{p} y_{t-p} + \epsilon_{t}, \quad \epsilon_{t} \overset{\text{iid}}{\sim} \mathcal{N}(0, \sigma^{2}) \\
+ &= \sum_{j=1}^{p} \phi_{j} y_{t-j} + \epsilon_{t}
+\end{align}
+$$
+for $t = 1, \ldots, T$.
+
+The $\phi_{j}$s are referred to as the AR coefficients, and $\epsilon_{t}$s are known as the innovations. We assume that the $\epsilon_{t}$s are conditionally independent on past values of the series. Similarly, we assume that they are independent and identically distributed following a zero-mean normal distribution with variance $\sigma^{2}$.
+
+For any $T > p$ we find the following likelihood:
+$$
+p(y_{1:T} \mid \phi_{1}, \ldots, \phi_{p}, \sigma^{2}) = p(y_{1:p}) \ \prod_{t=p+1}^{T} p(y_{t} \mid y_{(t-1):(t-p)}, \phi_{1}, \ldots, \phi_{p}, \sigma^{2})
+$$
+The lead term, $p(y_{1:p})$, is the joint density of the $p$ initial values. If we assume these values are fixed and known, then we can write for the subsequent values:
+$$
+p(y_{(p+1):T} \mid y_{1:p}, \phi_{1}, \ldots, \phi_{p}, \sigma^{2}) = \prod_{t=p+1}^{T} p(y_{t} \mid y_{(t-1):(t-p)}, \phi_{1}, \ldots, \phi_{p}, \sigma^{2})
+$$
+
+Now, we know that the observations are given by:
+$$
+\begin{align}
+y_{t} &= \sum_{j=1}^{p} \phi_{j} y_{t-j} + \epsilon_{t}, \quad \epsilon_{t} \overset{\text{iid}}{\sim}\mathcal{N}(0, \sigma^{2}) \\
+\Rightarrow y_{t} &\sim \mathcal{N}\left(\sum_{j=1}^{p} \phi_{j} y_{t-j}, \sigma^{2}\right)
+\end{align}
+$$
+
+We now introduce the following vectors:
+$$
+\begin{align}
+\mathbf{f}_{t} &= \begin{bmatrix}
+y_{t-1} & y_{t-2} & \ldots & y_{t-p}
+\end{bmatrix}^{\top} \\
+\boldsymbol{\phi} &= \begin{bmatrix}
+\phi_{1} & \phi_{2} & \ldots & \phi_{p}
+\end{bmatrix}^{\top} \\
+\end{align}
+$$
+We can then write:
+$$
+y_{t} \sim \mathcal{N}\left(\mathbf{f}_{t}^{\top} \boldsymbol{\phi} , \sigma^{2}\right)
+$$
+so that we have:
+$$
+\begin{align}
+p(y_{(p+1):T} \mid y_{1:p}, \phi_{1}, \ldots, \phi_{p}, \sigma^{2}) &= \prod_{t=p+1}^{T} p(y_{t} \mid y_{(t-1):(t-p)}, \phi_{1}, \ldots, \phi_{p}, \sigma^{2}) \\
+ &= \prod_{t=p+1}^{T} \mathcal{N}\left( \mathbf{f}_{t}^{\top} \boldsymbol{\phi}, \sigma^{2} \right)
+ \end{align}
+$$
+We can also combine the $n$ $\mathbf{f}_{t}$ vectors into an $F$ matrix:
+$$
+\mathbf{F} = \begin{bmatrix}
+y_{p} & y_{p+1} & \cdots & y_{T-1} \\
+y_{p-1} & y_{p} & \cdots & y_{T-2} \\
+\vdots & \vdots & \ddots & \vdots \\
+y_{1} & y_{2} & \cdots & y_{T-p}
+\end{bmatrix}
+$$
+so that we can write:
+$$
+\begin{align}
+p(y_{(p+1):T} \mid y_{1:p}, \phi_{1}, \ldots, \phi_{p}, \sigma^{2}) &= \prod_{t=p+1}^{T} p(y_{t} \mid y_{(t-1):(t-p)}, \phi_{1}, \ldots, \phi_{p}, \sigma^{2}) \\
+ &= \prod_{t=p+1}^{T} \mathcal{N}\left( \mathbf{f}_{t}^{\top} \boldsymbol{\phi}, \sigma^{2} \right) \\
+ &= \mathcal{N}\left(\mathbf{F}^{\top} \boldsymbol{\phi}, \sigma^{2} \mathbf{I}\right)
+\end{align}
+$$
+Notice the similarity between the AR model and the multiple linear regression model:
+
+$$
+\begin{align}
+\mathbf{y} &= \begin{bmatrix}
+y_{p+1}, \ldots, y_{T}
+\end{bmatrix}^{\top} \in \mathbb{R}^{n} \\
+\mathbf{y} &= \mathbf{F}^{\top} \boldsymbol{\phi} + \boldsymbol{\epsilon}
+\end{align}
+$$
+To complete the model formulation we use a conditional conjugate prior for $\phi_{1}, \ldots, \phi_{p}$ and $\sigma^{2}$. The conditional conjugate priors are:
+$$
+\begin{align}
+p(\boldsymbol{\phi}, \sigma^{2}) &= p(\boldsymbol{\phi} \mid \sigma^{2})\ p(\sigma^{2}) \\
+ &= \mathcal{N}\left( \boldsymbol{\phi} \mid \boldsymbol{m}_{0}, \sigma^{2} \mathbf{C}_{0}\right) \mathrm{IG}\left(\sigma^{2} \mid \frac{n_{0}}{2}, \frac{d_{0}}{2}\right)
+\end{align}
+$$
+
+
+
