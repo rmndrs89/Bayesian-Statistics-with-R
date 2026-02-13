@@ -17,7 +17,8 @@ book:
         - courses/C05 Capstone project/02_AR_model_fitting_example.qmd
         - courses/C05 Capstone project/03_first_step_project.qmd
         - courses/C05 Capstone project/04_model_selection.qmd
-        - courses/C05 Capstone project/95_gibbs_sampler.qmd
+        - courses/C05 Capstone project/05_gibbs_sampler.qmd
+        - courses/C05 Capstone project/06_location_and_scale_mixture_ar_model.qmd
         - courses/C05 Capstone project/99_capstone_project.qmd
     - summary.qmd
     - references.qmd
